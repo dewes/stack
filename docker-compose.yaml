@@ -1,0 +1,122 @@
+version: "3"
+services:
+  gluetun:
+    image: qmcgaw/gluetun
+    container_name: gluetun
+    # line above must be uncommented to allow external containers to connect. See https://github.com/qdm12/gluetun/wiki/Connect-a-container-to-gluetun#external-container-to-gluetun
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    ports:
+      - 8888:8888/tcp # HTTP proxy
+      - 8388:8388/tcp # Shadowsocks
+      - 8388:8388/udp # Shadowsocks
+      # QBT UI Port
+      - 8090:8090
+      # Bittorrent port
+      - 6881:6881
+      - 6881:6881/udp
+      # Web port
+      - 9080:8080
+      - 9117:9117
+      # Sonar
+      - 8989:8989
+      # Radarr
+      - 7878:7878
+      # Lidarr port
+      - 8686:8686
+      # Overseer
+      - 5055:5055
+      # Prowlarr port
+      - 9696:9696
+    volumes:
+      - /opt/stack/gluetun:/gluetun
+    environment:
+      # See https://github.com/qdm12/gluetun/wiki
+      - VPN_SERVICE_PROVIDER=nordvpn
+      - OPENVPN_USER=
+      - OPENVPN_PASSWORD=
+      - TZ=America/Sao_Paulo
+
+  qbittorrent:
+    image: linuxserver/qbittorrent
+    container_name: qbittorrent
+    environment:
+        - PUID=115
+        - PGID=1000
+        - TZ=America/Sao_Paulo
+        - UMASK_SET=022
+        - WEBUI_PORT=8090
+    volumes:
+        - /opt/stack/qbt/config:/config
+        - /dados/torrents:/downloads
+        - /nfs/series:/tvdownloads
+        - /nfs/filmes:/filmdownloads
+    network_mode: service:gluetun
+    restart: unless-stopped
+    depends_on:
+      - gluetun
+
+  prowlarr:
+    image: hotio/prowlarr:testing
+    container_name: prowlarr
+    environment:
+        - PUID=115
+        - PGID=1000
+        - TZ=America/Sao_Paulo
+    volumes:
+        - /opt/stack/prowlarr:/config
+    restart: unless-stopped
+    network_mode: service:gluetun
+    depends_on:
+        - gluetun
+        - qbittorrent
+
+  sonarr:
+    image: linuxserver/sonarr
+    container_name: sonarr
+    environment:
+        - PUID=115
+        - PGID=1000
+        - TZ=America/Sao_Paulo
+    volumes:
+        - /etc/localtime:/etc/localtime:ro
+        - /opt/stack/sonarr/config:/config
+        - /nfs/series:/tv
+        - /dados/torrents:/downloads
+    restart: unless-stopped
+    network_mode: service:gluetun
+    depends_on:
+        - prowlarr
+        - qbittorrent
+
+  radarr:
+    image: linuxserver/radarr
+    container_name: radarr
+    environment:
+        - PUID=115
+        - PGID=1000
+        - TZ=America/Sao_Paulo
+    volumes:
+        - /etc/localtime:/etc/localtime:ro
+        - /opt/stack/radarr/config:/config
+        - /nfs/filmes:/movies
+        - /dados/torrents:/downloads
+    restart: unless-stopped
+    network_mode: service:gluetun
+    depends_on:
+        - prowlarr
+        - qbittorrent
+
+  overseerr:
+    image: lscr.io/linuxserver/overseerr
+    container_name: overseerr
+    environment:
+      - PUID=115
+      - PGID=1000
+      - TZ=America/Sao_Paulo
+    network_mode: service:gluetun
+    volumes:
+      - /opt/stack/overseerr/config:/config
+    restart: unless-stopped
